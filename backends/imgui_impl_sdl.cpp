@@ -144,19 +144,32 @@ bool ImGui_ImplSDL2_ProcessEvent(const SDL_Event* event)
         }
     // Multi-viewport support
     case SDL_WINDOWEVENT:
-        Uint8 window_event = event->window.event;
-        if (window_event == SDL_WINDOWEVENT_CLOSE || window_event == SDL_WINDOWEVENT_MOVED || window_event == SDL_WINDOWEVENT_RESIZED)
-            if (ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle((void*)SDL_GetWindowFromID(event->window.windowID)))
+        {
+            Uint8 window_event = event->window.event;
+            if (window_event == SDL_WINDOWEVENT_CLOSE || window_event == SDL_WINDOWEVENT_MOVED || window_event == SDL_WINDOWEVENT_RESIZED)
+                if (ImGuiViewport* viewport = ImGui::FindViewportByPlatformHandle((void*)SDL_GetWindowFromID(event->window.windowID)))
+                {
+                    if (window_event == SDL_WINDOWEVENT_CLOSE)
+                        viewport->PlatformRequestClose = true;
+                    if (window_event == SDL_WINDOWEVENT_MOVED)
+                        viewport->PlatformRequestMove = true;
+                    if (window_event == SDL_WINDOWEVENT_RESIZED)
+                        viewport->PlatformRequestResize = true;
+                    return true;
+                }
+            break;
+        }
+    case SDL_MOUSEMOTION:
+        {
+            if(SDL_GetRelativeMouseMode())
             {
-                if (window_event == SDL_WINDOWEVENT_CLOSE)
-                    viewport->PlatformRequestClose = true;
-                if (window_event == SDL_WINDOWEVENT_MOVED)
-                    viewport->PlatformRequestMove = true;
-                if (window_event == SDL_WINDOWEVENT_RESIZED)
-                    viewport->PlatformRequestResize = true;
-                return true;
+                io.MouseDelta.x = event->motion.xrel;
+                io.MouseDelta.y = event->motion.yrel;
+                io.MousePos.x = event->motion.x;
+                io.MousePos.y = event->motion.y;
             }
-        break;
+            break;
+        }
     }
     return false;
 }
@@ -290,18 +303,22 @@ static void ImGui_ImplSDL2_UpdateMousePosAndButtons()
     // [1]
     // Only when requested by io.WantSetMousePos: set OS mouse pos from Dear ImGui mouse pos.
     // (rarely used, mostly when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
-    if (io.WantSetMousePos)
+
+    if(!SDL_GetRelativeMouseMode())
     {
+        if (io.WantSetMousePos)
+        {
 #if SDL_HAS_CAPTURE_AND_GLOBAL_MOUSE
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-            SDL_WarpMouseGlobal((int)io.MousePos.x, (int)io.MousePos.y);
-        else
+            if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+                SDL_WarpMouseGlobal((int)io.MousePos.x, (int)io.MousePos.y);
+            else
 #endif
-            SDL_WarpMouseInWindow(g_Window, (int)io.MousePos.x, (int)io.MousePos.y);
-    }
-    else
-    {
-        io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+                SDL_WarpMouseInWindow(g_Window, (int)io.MousePos.x, (int)io.MousePos.y);
+        }
+        else
+        {
+            io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+        }
     }
 
     // [2]
@@ -312,6 +329,8 @@ static void ImGui_ImplSDL2_UpdateMousePosAndButtons()
     io.MouseDown[1] = g_MousePressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
     io.MouseDown[2] = g_MousePressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
     g_MousePressed[0] = g_MousePressed[1] = g_MousePressed[2] = false;
+
+    if(SDL_GetRelativeMouseMode()) return;
 
 #if SDL_HAS_CAPTURE_AND_GLOBAL_MOUSE && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !(defined(__APPLE__) && TARGET_OS_IOS)
 
